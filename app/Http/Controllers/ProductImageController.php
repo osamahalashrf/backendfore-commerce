@@ -6,6 +6,7 @@ use App\Models\ProductImage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Storage;
 
 class ProductImageController extends Controller
 {
@@ -31,18 +32,23 @@ class ProductImageController extends Controller
     public function store(Request $request)
     {
         $product = new ProductImage();
+
         if ($request->hasFile('image')) {
             $file = $request->file('image');
-            $filename = date('YmdHis') . '.' . $file->getClientOriginalExtension();
-            $product->image = url('/') . '/images/' . $filename;
-            $path = 'images';
-            $file->move($path, $filename);
+
+            // Store the file in the 'public/images' directory
+            $path = $file->store('images', 'public');
+
+            // Generate the public URL for the stored file
+            $product->image = Storage::url($path);
         }
 
         $product->product_id = $request->product_id;
         $product->save();
+
         return $product;
     }
+
 
     /**
      * Display the specified resource.
@@ -74,16 +80,18 @@ class ProductImageController extends Controller
     public function destroy($id)
     {
         $image = ProductImage::findOrFail($id);
-        $path = public_path() . '/images/' . substr(
-            $image['image'],
-            strrpos($image['image'], '/') + 1
-        );
 
-        if (File::exists($path)) {
-            File::delete($path);
+        if ($image->image) {
+            // Extract the relative storage path from the image URL
+            $path = str_replace(url('/storage'), 'public', $image->image);
+
+            // Check if the file exists and delete it
+            if (Storage::exists($path)) {
+                Storage::delete($path);
+            }
         }
-        DB::table('product_images')
-            ->where('id', '=', $id)
-            ->delete();
+
+        // Delete the record from the database
+        $image->delete();
     }
 }
